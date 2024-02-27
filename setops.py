@@ -7,10 +7,9 @@ Notes:
   Fr   10am-2pm
   Sa   10am-2pm
 '''
-from sys import argv as system_argvs, exit, setrecursionlimit
+from os import system
+from sys import argv as system_argvs
 from os.path import isfile
-
-setrecursionlimit(999)
 
 ERROR_MESSAGE = '''ERROR: Invalid inputs. Please try again.
 Usage: python3 setops.py "set1=<file_1>;set2=<file_2>;operation=<operation>"'''
@@ -20,14 +19,15 @@ i_head = lambda l: l[0]
 i_tail = lambda l: l[1:]
 slice = lambda l, start=None, end=None: l[start:end]
 at_index = lambda l, n: l[n]
-is_empty = lambda l: len(l) == 0
+is_empty = lambda l: len(l) == 0 or l == ['']
 l_append = lambda l, elem: l + [elem]
 
 #Lambda functions to perform operations on strings/chars
-is_digit = lambda string: string.isdigit()
-is_alnum = lambda string: string.isalnum()
-is_alpha = lambda string: string.isalpha()
-is_upper = lambda string: string >= 'A' and string <= 'Z'
+is_digit = lambda char: char >= '0' and char <= '9'
+is_upper = lambda char: char >= 'A' and char <= 'Z'
+is_lower = lambda char: char >= 'a' and char <= 'z'
+is_alpha = lambda char: is_upper(char) or is_lower(char)
+is_alnum = lambda char: is_alpha(char) or is_digit(char)
 """
 
 GENERAL LIST OPERATION FUNCTIONS
@@ -65,6 +65,17 @@ def file_join(arr, joiner):
   return i_head(arr) + joiner + file_join(i_tail(arr), joiner)
 
 
+# Performs a filter recursively
+def recursive_filter(lambda_exp, list):
+  if is_empty(list):
+    return []
+
+  if lambda_exp(i_head(list)):
+    return [i_head(list)] + recursive_filter(lambda_exp, i_tail(list))
+
+  return recursive_filter(lambda_exp, i_tail(list))
+
+
 """
 
 END OF GENERAL LIST OPERATION FUNCTIONS
@@ -75,6 +86,17 @@ END OF GENERAL LIST OPERATION FUNCTIONS
 GENERAL STRING OPERATION FUNCTIONS
 
 """
+
+
+#Lowercases all chars in a string
+def lower_case(string):
+  if is_empty(string):
+    return ""
+
+  if is_upper(i_head(string)):
+    return chr(ord(i_head(string)) + 32) + lower_case(i_tail(string))
+
+  return i_head(string) + lower_case(i_tail(string))
 
 
 #Checks if sub_string is in string
@@ -190,10 +212,12 @@ def is_inputs_valid_helper(file1, file2, operation):
 def validate_file_inputs(args):
   file1, file2, op = split_args(args)
 
-  if not is_inputs_valid_helper(file1, file2, op):
+  lowercased_op = lower_case(op)
+
+  if not is_inputs_valid_helper(file1, file2, lowercased_op):
     return False
 
-  return [file1, file2, op]
+  return [file1, file2, lowercased_op]
 
 
 """
@@ -201,7 +225,6 @@ def validate_file_inputs(args):
 END OF SYSTEM ARGUMENTS PARSING AND VALIDATION FUNCTIONS
 
 """
-
 """
 
 FILE PARSING AND SET CREATION FUNCTIONS
@@ -210,7 +233,8 @@ FILE PARSING AND SET CREATION FUNCTIONS
 
 
 #Helps parse periods when floats are detected
-#Works by checking if succeeding characters are digits until non-alphanumeric character is found
+#Works by checking if succeeding characters are digits
+#until non-alphanumeric character is found
 #If another period is found, it is replaced with a space
 def period_helper(string, n=0):
 
@@ -238,10 +262,7 @@ def handle_periods(string, n=0):
     if n == 0:
       return handle_periods(i_tail(string))
     if len(string) == n + 1:
-      #FIXME
-      #NEED TESTING FUNCTION
       return slice(string, end=n)
-    #FIXME: Fix helper function
     if is_digit(at_index(string, n - 1)) and is_digit(at_index(string, n + 1)):
       return handle_periods(period_helper(string, n + 1), n + 1)
 
@@ -317,17 +338,6 @@ def filter_input(line):
       sep_words_letters(replace_punc(handle_periods(line))))
 
 
-#Lowercases all chars in a string
-def lower_case(string):
-  if is_empty(string):
-    return ""
-
-  if is_upper(i_head(string)):
-    return chr(ord(i_head(string)) + 32) + lower_case(i_tail(string))
-
-  return i_head(string) + lower_case(i_tail(string))
-
-
 #Iterates through list and deletes elements in list equal to arr[tag]
 def delete_dupes_helper(arr, tag, n=0):
   if is_empty(arr):
@@ -361,6 +371,7 @@ def delete_dupes(arr, n=0):
 
   return delete_dupes(new_arr, n + 1)
 
+#Peforms several filtering functions in order to get set from file
 def get_set(file):
   with open(file, "r") as f:
     filelines = f.readlines()
@@ -375,28 +386,17 @@ def get_set(file):
 
   return set
 
+
 """
 
 END OF FILE PARSING AND SET CREATION FUNCTIONS
 
 """
-
-
 """
 
 SET OPERATION FUNCTIONS
 
 """
-
-
-def union_helper(list, set, n=0):
-  if len(set) == n:
-    return list
-
-  if not element_in_list(list, at_index(set, n)):
-    return union_helper(l_append(list, at_index(set, n)), set, n + 1)
-
-  return union_helper(list, set, n + 1)
 
 
 def union(set1, set2):
@@ -407,14 +407,14 @@ def union(set1, set2):
   if is_empty(set2):
     return set1
 
-  return union_helper(set1, set2)
+  return recursive_filter(lambda elem: not element_in_list(set1, elem), set2) + set1
 
 
 def intersection(set1, set2):
   if is_empty(set1) or is_empty(set2):
     return []
 
-  return list(filter(lambda x: element_in_list(set2, x), set1))
+  return recursive_filter(lambda x: element_in_list(set2, x), set1)
 
 
 def difference(set1, set2):
@@ -423,7 +423,7 @@ def difference(set1, set2):
   if is_empty(set2):
     return set1
 
-  return list(filter(lambda x: not element_in_list(set2, x), set1))
+  return recursive_filter(lambda x: not element_in_list(set2, x), set1)
 
 
 def perform_operation(set1, set2, operation):
@@ -434,52 +434,59 @@ def perform_operation(set1, set2, operation):
   if operation == "difference":
     return difference(set1, set2)
 
-#FIXME
-#FIXME
-#FIXME
-def qksrt():
-  pass
+
+#Performs qksort on array using filter function
+def qksrt(arr):
+  if len(arr) <= 1:
+    return arr
+
+  pivot = arr[len(arr) // 2]
+
+  left = recursive_filter(lambda x: x < pivot, arr)
+  middle = recursive_filter(lambda x: x == pivot, arr)
+  right = recursive_filter(lambda x: x > pivot, arr)
+
+  return qksrt(left) + middle + qksrt(right)
+
 
 def set_operations(file1, file2, operation):
 
   set1, set2 = get_set(file1), get_set(file2)
-  
+
   operated_set = perform_operation(set1, set2, operation)
-  #FIXME
-  #FIXME
-  #FIXME
-  #sorted_set = qksrt(operated_set)
-  return perform_operation(set1, set2, operation)
+  
+  sorted_set = qksrt(operated_set)
+
+  return sorted_set
+
 
 """
 
 END OF SET OPERATION FUNCTIONS
 
 """
-
 """
 
 FILE WRITE AND MAIN FUNCTIONS
 
 """
 
+
 def write_to_file(list):
   with open("result.txt", "w") as f:
     f.write(file_join(list, "\n"))
 
 
-#for debugging purposes (COMMENT OUT IF INPUTTING ARGS IN SHELL)
-system_argvs = ["setops.py", "set1=a5.txt;set2=b5.txt;operation=difference"]
-
-
 def main(sys_argv):
   if not validate_args(sys_argv):
-    exit(ERROR_MESSAGE)
+    print(ERROR_MESSAGE)
+    return
 
   inputs = validate_file_inputs(sys_argv)
 
   if not inputs:
-    exit(ERROR_MESSAGE)
+    print(ERROR_MESSAGE)
+    return
 
   file1, file2, op = inputs
 
